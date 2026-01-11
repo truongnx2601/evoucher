@@ -5,8 +5,7 @@ const prisma = new PrismaClient()
 async function main() {
   await prisma.campaign.createMany({
     data: [
-      { name: "Tết 2026", prefix: "TET26", isActive: true },
-      { name: "Khai trương", prefix: "OPEN", isActive: false }
+      { name: "Year End Party", prefix: "YEP", isActive: true, maxVoucher: 2000 },
     ],
     skipDuplicates: true
   })
