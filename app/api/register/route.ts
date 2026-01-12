@@ -25,9 +25,9 @@ export async function POST(req: Request) {
         }
 
         const employee = await tx.employee.upsert({
-          where: { employeeCode },
+          where: { employeeCode: employeeCode.toUpperCase() },
           update: {},
-          create: { employeeCode, phone, fullName, center }
+          create: { employeeCode: employeeCode.toUpperCase(), phone, fullName, center }
         })
 
         // CHECK TRÙNG
