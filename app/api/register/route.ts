@@ -3,16 +3,43 @@ import { Prisma } from "@prisma/client"
 import { NextResponse } from "next/server"
 import { generateVoucherCode } from "@/lib/voucher"
 
+const EMPLOYEE_CODE_REGEX = /^(mn|hn)/i
+
 export async function POST(req: Request) {
-  const form = await req.formData()
-
-  const employeeCode = form.get("employeeCode") as string
-  const phone = form.get("phone") as string
-  const fullName = form.get("fullName") as string
-  const center = form.get("center") as string
-  const campaignId = form.get("campaignId") as string
-
   try {
+    const form = await req.formData()
+
+    const rawEmployeeCode = String(form.get("employeeCode") || "").trim()
+    const phone = String(form.get("phone") || "").trim()
+    const fullName = String(form.get("fullName") || "").trim()
+    const center = String(form.get("center") || "").trim()
+    const campaignId = String(form.get("campaignId") || "").trim()
+
+
+    if (
+      !rawEmployeeCode ||
+      !phone ||
+      !fullName ||
+      !center ||
+      !campaignId
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Thiếu thông tin bắt buộc" },
+        { status: 400 }
+      )
+    }
+
+
+    if (!EMPLOYEE_CODE_REGEX.test(rawEmployeeCode)) {
+      return NextResponse.json(
+        { success: false, message: "Mã nhân viên phải bắt đầu bằng MN hoặc HN" },
+        { status: 400 }
+      )
+    }
+
+
+    const employeeCode = rawEmployeeCode.toUpperCase()
+
     const voucher = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
 
@@ -21,16 +48,24 @@ export async function POST(req: Request) {
         })
 
         if (!campaign || !campaign.isActive) {
-          throw new Error("Campaign inactive")
+          throw new Error("CAMPAIGN_INACTIVE")
         }
 
         const employee = await tx.employee.upsert({
-          where: { employeeCode: employeeCode.toUpperCase() },
-          update: {},
-          create: { employeeCode: employeeCode.toUpperCase(), phone, fullName, center }
+          where: { employeeCode },
+          update: {
+            phone,
+            fullName,
+            center
+          },
+          create: {
+            employeeCode,
+            phone,
+            fullName,
+            center
+          }
         })
 
-        // CHECK TRÙNG
         const existingVoucher = await tx.voucher.findUnique({
           where: {
             campaignId_employeeId: {
@@ -49,11 +84,9 @@ export async function POST(req: Request) {
         })
 
         if (count >= campaign.maxVoucher) {
-          throw new Error("Voucher limit reached")
+          throw new Error("VOUCHER_LIMIT_REACHED")
         }
 
-
-        // TẠO MỚI
         for (let i = 0; i < 5; i++) {
           try {
             return await tx.voucher.create({
@@ -68,7 +101,7 @@ export async function POST(req: Request) {
           }
         }
 
-        throw new Error("Cannot generate voucher")
+        throw new Error("CANNOT_GENERATE_VOUCHER")
       }
     )
 
@@ -76,10 +109,18 @@ export async function POST(req: Request) {
       success: true,
       code: voucher.code
     })
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
+
+    const message =
+      e.message === "CAMPAIGN_INACTIVE"
+        ? "Chiến dịch không còn hiệu lực"
+        : e.message === "VOUCHER_LIMIT_REACHED"
+        ? "Chiến dịch đã hết voucher"
+        : "Có lỗi xảy ra, vui lòng thử lại"
+
     return NextResponse.json(
-      { success: false },
+      { success: false, message },
       { status: 500 }
     )
   }

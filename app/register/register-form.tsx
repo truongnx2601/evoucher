@@ -1,4 +1,5 @@
 "use client"
+
 import { useState } from "react"
 import { VoucherResult } from "./result"
 
@@ -7,6 +8,8 @@ type Campaign = {
   name: string
 }
 
+const EMPLOYEE_CODE_REGEX = /^(mn|hn)/i
+
 export default function RegisterForm({
   campaigns
 }: {
@@ -14,23 +17,41 @@ export default function RegisterForm({
 }) {
   const [code, setCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setLoading(true)
+    setError(null)
 
     const formData = new FormData(e.currentTarget)
+    const employeeCode = String(formData.get("employeeCode") || "").trim()
 
-    const res = await fetch("/api/register", {
-      method: "POST",
-      body: formData
-    })
+    if (!EMPLOYEE_CODE_REGEX.test(employeeCode)) {
+      setError("Mã nhân viên phải bắt đầu bằng MN hoặc HN")
+      return
+    }
 
-    const data = await res.json()
-    setLoading(false)
+    formData.set("employeeCode", employeeCode.toUpperCase())
 
-    if (data.success) {
-      setCode(data.code)
+    setLoading(true)
+
+    try {
+      const res = await fetch("/api/register", {
+        method: "POST",
+        body: formData
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        setCode(data.code)
+      } else {
+        setError(data.message ?? "Có lỗi xảy ra")
+      }
+    } catch {
+      setError("Không thể kết nối tới server")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -42,10 +63,36 @@ export default function RegisterForm({
 
       {!code ? (
         <form onSubmit={onSubmit} className="space-y-4">
-          <input name="employeeCode" placeholder="Mã nhân viên" className="border p-2 w-full" required />
-          <input name="fullName" placeholder="Họ tên" className="border p-2 w-full" required />
-          <input name="phone" placeholder="Số điện thoại" className="border p-2 w-full" required />
-          <input name="center" placeholder="Trung tâm" className="border p-2 w-full" required />
+          <input
+            name="employeeCode"
+            placeholder="Mã nhân viên"
+            className="border p-2 w-full"
+            required
+            onChange={(e) => {
+              e.target.value = e.target.value.toUpperCase()
+            }}
+          />
+
+          <input
+            name="fullName"
+            placeholder="Họ tên"
+            className="border p-2 w-full"
+            required
+          />
+
+          <input
+            name="phone"
+            placeholder="Số điện thoại"
+            className="border p-2 w-full"
+            required
+          />
+
+          <input
+            name="center"
+            placeholder="Trung tâm"
+            className="border p-2 w-full"
+            required
+          />
 
           <select
             name="campaignId"
@@ -64,9 +111,15 @@ export default function RegisterForm({
             ))}
           </select>
 
+          {error && (
+            <p className="text-red-600 text-sm">
+              {error}
+            </p>
+          )}
+
           <button
             disabled={loading}
-            className="bg-black text-white w-full py-2"
+            className="bg-black text-white w-full py-2 disabled:opacity-50"
           >
             {loading ? "Đang xử lý..." : "Nhận voucher"}
           </button>
